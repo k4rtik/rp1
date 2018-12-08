@@ -392,8 +392,8 @@ Proof.
     replace (f (m + n)%nat) with (g n) by (subst; reflexivity).
     replace (Csum (fun x : nat => f (S (m + x))) n) with
             (Csum (fun x : nat => g (S x)) n).
-    Focus 2. apply Csum_eq. subst. apply functional_extensionality.
-    intros; rewrite <- plus_n_Sm. reflexivity.
+    2: { apply Csum_eq. subst. apply functional_extensionality.
+    intros; rewrite <- plus_n_Sm. reflexivity. }
     rewrite Csum_extend_l.
     rewrite Csum_extend_r.
     reflexivity.
@@ -413,7 +413,7 @@ Proof.
     remember ((fun x : nat => f (x / n)%nat * g (x mod n)%nat)) as h.
     replace (Csum (fun x : nat => f m * g x) n) with
             (Csum (fun x : nat => h ((m * n) + x)%nat) n). 
-    Focus 2.
+    2: {
       subst.
       apply Csum_eq_bounded.
       intros x Hx.
@@ -423,7 +423,7 @@ Proof.
       rewrite Nat.add_mod by assumption.
       rewrite Nat.mod_mul by assumption.
       rewrite plus_0_l.
-      repeat rewrite Nat.mod_small; trivial.
+      repeat rewrite Nat.mod_small; trivial. }
     rewrite <- Csum_sum.
     rewrite plus_comm.
     reflexivity.
