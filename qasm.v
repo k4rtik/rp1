@@ -1,15 +1,18 @@
-Require Import Reals.
 Require Import String.
-Require Import List.
-
-Import ListNotations.
+Require Import Prelim.
+Require Complex.
+Require List.
 
 Module qasm.
+
+  (* First we define Open QASM Grammar:
+     https://arxiv.org/pdf/1707.03429.pdf pp. 21-22 *)
 
   Definition id := string.
   Definition real := R.
   Definition nninteger := nat.
 
+  (* not explicit in grammar *)
   Inductive binop : Set :=
   | b_plus
   | b_minus
@@ -41,19 +44,26 @@ Module qasm.
   | a_id (name : id)
   | a_ida (name : id) (size : nninteger).
 
+  (*
   Definition mixedlist := list argument. (* probably imprecise *)
   Definition anylist := list argument. (* probably imprecise *)
+  *)
+
+  (* To prevent confusion over which of the two lists to use,
+     I am just going to use an arglist *)
+  Definition arglist := list argument.
 
   Inductive uop : Set :=
   | u_U (el : explist) (a : argument)
   | u_CX (a1 a2 : argument)
-  | u_gate (name : id) (el : explist) (al : anylist).
+  | u_gate (name : id) (el : explist) (al : arglist).
 
   Inductive qop : Set :=
   | q_uop (u : uop)
   | q_meas (aq ac : argument)
   | q_reset (aq : argument).
 
+  (* not explicit in the grammar *)
   Inductive gop : Set :=
   | g_uop (u : uop)
   | g_barrier (ids : idlist).
@@ -69,34 +79,66 @@ Module qasm.
 
   Inductive statement : Type :=
   | s_decl (d : decl)
-  | s_newgate (g : gatedecl)
+  | s_newgate (g : gatedecl) (* combines two production rules *)
   | s_opaque (name : id) (params : option idlist) (qargs : idlist)
   | s_qop (q : qop)
   | s_if (name : id) (val : nninteger) (q : qop)
-  | s_barrier (args : anylist)
-  | s_seq (s1 s2 : statement).
+  | s_barrier (args : arglist)
+  | s_seq (s1 s2 : statement). (* introducing this, not in the grammar *)
 
   Definition program := list statement.
 
+  (* ignoring <mainprogram> as it serves no purpose for our needs *)
+
+
+  (* Next we need to define some variables and write some programs *)
+  (* Here's Deutsch algorithm in QASM that we write below. Src:
+     https://github.com/Qiskit/openqasm/blob/master/examples/ibmqx2/Deutsch_Algorithm.qasm
+
+     ```
+     qreg q[2];
+     creg c[1];
+
+     X q[1];
+     H q[0];
+     H q[1];
+     CX q[0],q[1];
+     H q[0];
+
+     measure q[0] -> c[0];
+     ```
+   *)
   Definition q : string := "q".
   Definition c : string := "c".
   Definition X : string := "X".
   Definition H : string := "H".
 
+  (* Introduce notation for sequencing *)
   Bind Scope statement_scope with statement.
-  (* Perhaps define this to be a cons and remove the s_seq additional statement above, so I can use program *)
+  (* Perhaps define this to be a cons and remove the s_seq additional statement
+     above, so I can use program as the return type instead of statement *)
   Notation "s1 ; s2" :=
     (s_seq s1 s2) (at level 80, right associativity) : statement_scope.
 
   Open Scope statement_scope.
 
+Import List.
+Import ListNotations.
+
+  (* This is how we can define new gates, currently they can't be used *)
   Definition X_gate : statement :=
     (* gate x a { u3(pi,0,pi) a; } *)
-    s_newgate (gate X None [q] [g_uop (u_U (e_pi :: e_real R0 :: e_pi :: nil) (a_id q))]).
+    s_newgate (gate X None [q]
+                    [g_uop
+                       (u_U (e_pi :: e_real R0 :: e_pi :: nil) (a_id q))]).
 
   Definition H_gate : statement :=
     (* gate h a { u2(0,pi) a; } *)
-    s_newgate (gate H None [q] [g_uop (u_U ((e_binop e_pi b_div (e_nat 2)) :: e_real R0 :: e_pi :: nil) (a_id q))]).
+    s_newgate (gate H None [q]
+                    [g_uop
+                       (u_U
+                          ((e_binop e_pi b_div (e_nat 2)) :: e_real R0 :: e_pi :: nil)
+                          (a_id q))]).
 
   Definition deutsch : statement :=
     s_decl (qreg q 2);
@@ -110,6 +152,28 @@ Module qasm.
     s_qop (q_meas (a_ida q 0) (a_ida c 0)).
 
   Print deutsch.
+
+  (* Now that we know that we can write programs using the Open QASM grammar,
+     let's try writing and proving properties about the simplest of all,
+     Phil's algorithm (Lipton, Regan Ch-7). *)
+
+  Definition phil1 : statement :=
+    s_decl (qreg q 1);
+    s_decl (creg c 1);
+
+    s_qop (q_uop (u_gate H [] [a_ida q 0]));
+    s_qop (q_meas (a_ida q 0) (a_ida c 0)).
+
+  Print phil1.
+
+  (* Even this simplest of the algorithm's need us to be able to call a user
+     defined gate -- H, so we need a way to do that. *)
+
+  (* An alternative is to define more elementary gates such as Pauli X, Y, Z
+     and H as uop's which is what I am leaning towards doing, but I need a way
+     to represent complex numbers first. *)
+
+  Import Complex.
 
   Definition cstate := total_map bool.
   Definition qstate := total_map nat.
