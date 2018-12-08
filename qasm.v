@@ -1,6 +1,7 @@
 Require Import String.
 Require Import Prelim.
 Require Complex.
+Require Matrix.
 Require List.
 
 Module qasm.
@@ -174,6 +175,7 @@ Import ListNotations.
      to represent complex numbers first. *)
 
   Import Complex.
+  Import Matrix.
 
   Definition cstate := total_map bool.
   Definition qstate := total_map nat.
