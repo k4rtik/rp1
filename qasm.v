@@ -1,8 +1,7 @@
 Require Import String.
 Require Import Prelim.
-Require Complex.
 Require Matrix.
-Require List.
+Require Maps.
 
 Module qasm.
 
@@ -57,6 +56,10 @@ Module qasm.
   Inductive uop : Set :=
   | u_U (el : explist) (a : argument)
   | u_CX (a1 a2 : argument)
+  | u_H (a : argument) (* custom addition *)
+  | u_X (a : argument) (* custom addition *)
+  | u_Y (a : argument) (* custom addition *)
+  | u_Z (a : argument) (* custom addition *)
   | u_gate (name : id) (el : explist) (al : arglist).
 
   Inductive qop : Set :=
@@ -75,8 +78,8 @@ Module qasm.
   | gate (name : id) (params : option idlist) (qargs : idlist) (body : goplist).
 
   Inductive decl : Set :=
-  | qreg (name : id) (size : nninteger)
-  | creg (name : id) (size : nninteger).
+  | d_qreg (name : id) (size : nninteger)
+  | d_creg (name : id) (size : nninteger).
 
   Inductive statement : Type :=
   | s_decl (d : decl)
@@ -111,21 +114,31 @@ Module qasm.
    *)
   Definition q : string := "q".
   Definition c : string := "c".
-  Definition X : string := "X".
-  Definition H : string := "H".
+(*  Definition X : string := "X".
+  Definition H : string := "H". *)
 
-  (* Introduce notation for sequencing *)
+  (* Introduce some notation *)
   Bind Scope statement_scope with statement.
+  Notation "'qreg' q # n" :=
+    (s_decl (d_qreg q n)) (at level 60, right associativity) : statement_scope.
+  Notation "'creg' c # n" :=
+    (s_decl (d_creg c n)) (at level 60, right associativity) : statement_scope.
+  Notation "'H' q # n" :=
+    (s_qop (q_uop (u_H (a_ida q n)))) (at level 60, right associativity) : statement_scope.
+  Notation "'X' q # n" :=
+    (s_qop (q_uop (u_X (a_ida q n)))) (at level 60, right associativity) : statement_scope.
+  Notation "'CX' q0 # n , q1 # m" :=
+    (s_qop (q_uop (u_CX (a_ida q0 n) (a_ida q1 m)))) (at level 60, right associativity) : statement_scope.
+  Notation "'meas' q # n , c # m" :=
+    (s_qop (q_meas (a_ida q n) (a_ida c m))) (at level 60, right associativity) : statement_scope.
   (* Perhaps define this to be a cons and remove the s_seq additional statement
      above, so I can use program as the return type instead of statement *)
-  Notation "s1 ; s2" :=
+  Notation "s1 ;; s2" :=
     (s_seq s1 s2) (at level 80, right associativity) : statement_scope.
 
   Open Scope statement_scope.
 
-Import List.
-Import ListNotations.
-
+(*
   (* This is how we can define new gates, currently they can't be used *)
   Definition X_gate : statement :=
     (* gate x a { u3(pi,0,pi) a; } *)
@@ -140,30 +153,31 @@ Import ListNotations.
                        (u_U
                           ((e_binop e_pi b_div (e_nat 2)) :: e_real R0 :: e_pi :: nil)
                           (a_id q))]).
+*)
 
   Definition deutsch : statement :=
-    s_decl (qreg q 2);
-    s_decl (creg c 1);
+    qreg q#2;;
+    creg c#1;;
 
-    s_qop (q_uop (u_gate X [] [a_ida q 1]));
-    s_qop (q_uop (u_gate H [] [a_ida q 0]));
-    s_qop (q_uop (u_gate H [] [a_ida q 1]));
-    s_qop (q_uop (u_CX (a_ida q 0) (a_ida q 1)));
-    s_qop (q_uop (u_gate H [] [a_ida q 0]));
-    s_qop (q_meas (a_ida q 0) (a_ida c 0)).
+    X q#1;;
+    H q#0;;
+    H q#1;;
+    CX q#0, q#1;;
+    H q#0;;
+    meas q#0, c#0.
 
   Print deutsch.
 
   (* Now that we know that we can write programs using the Open QASM grammar,
      let's try writing and proving properties about the simplest of all,
-     Phil's algorithm (Lipton, Regan Ch-7). *)
+     Phil's algorithm (Lipton, Regan Ch-7) basically a coin toss. *)
 
   Definition phil1 : statement :=
-    s_decl (qreg q 1);
-    s_decl (creg c 1);
+    qreg q#1;;
+    creg c#1;;
 
-    s_qop (q_uop (u_gate H [] [a_ida q 0]));
-    s_qop (q_meas (a_ida q 0) (a_ida c 0)).
+    H q#0;;
+    meas q#0, c#0.
 
   Print phil1.
 
@@ -171,65 +185,23 @@ Import ListNotations.
      defined gate -- H, so we need a way to do that. *)
 
   (* An alternative is to define more elementary gates such as Pauli X, Y, Z
-     and H as uop's which is what I am leaning towards doing, but I need a way
-     to represent complex numbers first. *)
+     and H as uop's which is what I chose to do, but I need a way to represent
+     complex numbers, vectors and matrices first. *)
 
-  Import Complex.
   Import Matrix.
+  Import Maps.
 
-  Definition cstate := total_map bool.
-  Definition qstate := total_map nat.
+  (* We define state as a total map from id to matrices *)
+  Definition state (m n : nat) := total_map (Matrix m n).
 
-  Inductive cexp : Type :=
-  | CTrue
-  | CFalse
-  | Cbit (x : string).
-
-  Fixpoint ceval (cst: cstate) (c : cexp) : bool :=
-    match c with
-    | CTrue => true
-    | CFalse => false
-    | Cbit x => cst x
-    end.
-
-  Inductive qexp : Type :=
-  | Q0
-  | Q1
-  | Qbit (x : string).
-
-  Fixpoint qeval (qst: qstate) (q : qexp) : nat :=
-    match q with
-    | Q0 => 0
-    | Q1 => 1
-    | Qbit x => qst x
-    end.
-
-  Definition empty_st := (_ !-> false).
+  Definition empty_st := (_ !-> I 1).
 
   Notation "a '!->' x"  := (t_update empty_st a x) (at level 100).
 
-  Definition x : string := "x".
-  Definition q1 : string := "q1".
-  Definition q2 : string := "q2".
-
-  Example cexp1 :
-    ceval (x !-> true) (Cbit x)
-  = true.
-  Proof. simpl. reflexivity. Qed.
-
-  Example cexp2 :
-    ceval (x !-> false) (Cbit x)
-  = false.
-  Proof. simpl. reflexivity. Qed.
-
-  Inductive com : Type :=
-  | QDecl (q : qexp) (n : nat)
-  | QReset (q : qexp)
-  | QMeasure (q : qexp) (c : cexp)
-  | QCX (q1 q2 : qexp)
-  | QX (q : qexp)
-  | QH (q : qexp)
-  | QSeq (c1 c2 : com).
+  Fixpoint seval (st : state) (s : statement) {struct s} : state :=
+    match s with
+    | qreg q # n => (q !-> (Vector n) ; st)
+    end.
 
   (* Properties worth verifying
      - Whether U_f is unitary (QCX above)
