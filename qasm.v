@@ -204,7 +204,10 @@ Definition init0 (n : nat) : Square n :=
     | _ => C0
     end.
 
-Definition empty_st (n : nat) := (_ !-> init0 n).
+Definition zero (n : nat) : Square n :=
+  fun x y => C0.
+
+Definition empty_st (n : nat) := (_ !-> zero n).
 
 Notation "a '!->' x"  := (t_update empty_st a x) (at level 100).
 
@@ -213,8 +216,8 @@ Fixpoint seval {n : nat} (st : state n) (s : statement) : state n :=
   | qreg q # n => (q !-> init0 n ; st)
   | creg c # n => (c !-> init0 n ; st) (* incorrect *)
   | meas q # n, c # m => let st' := print_matrix (st q) in st
-  | X q # n => (q !-> (st q) ; st)
-  | H q # n => (q !-> (st q) ; st)
+  | X q # n => (q !-> (st q) ; st) (* TODO *)
+  | H q # n => (q !-> (st q) ; st) (* TODO required for phil1 *)
   | CX q1 # n, q2 # m => st (* TODO *)
   | s_newgate _ => st
   | s_opaque _ _ _ => st
@@ -224,7 +227,20 @@ Fixpoint seval {n : nat} (st : state n) (s : statement) : state n :=
   | _ => st
   end.
 
+Check seval (empty_st 2) phil1.
+
+Example empty_state_zero_on_any : (empty_st 2) c
+= zero 2.
+Proof.
+  simpl. reflexivity. Qed.
+
+Example decl_adds_to_state : (seval (empty_st 2) (qreg q#2%nat)) q
+= (init0 2).
+Proof.
+  simpl. reflexivity. Qed.
+
 (* Properties worth verifying
      - Whether U_f is unitary (QCX above)
      - output for constant is just zero
      - output for balanced in just one
+*)
