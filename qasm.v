@@ -2,6 +2,7 @@ Require Import String.
 Require Import Prelim.
 Require Matrix.
 Require Maps.
+Require Complex.
 
 Module qasm.
 
@@ -191,16 +192,37 @@ Module qasm.
   Import Matrix.
   Import Maps.
 
-  (* We define state as a total map from id to matrices *)
-  Definition state (m n : nat) := total_map (Matrix m n).
+  (* We define state as a total map from id to density matrices *)
+  Definition state (n : nat) := total_map (Square n).
 
-  Definition empty_st := (_ !-> I 1).
+  Import Complex.
+
+  (* QASM declarations start with |0> *)
+  Definition init0 (n : nat) : Square n :=
+    fun x y =>
+      match (x, y) with
+      | (0, 0) => 1%R
+      | _ => C0
+      end.
+
+  Definition empty_st (n : nat) := (_ !-> init0 n).
 
   Notation "a '!->' x"  := (t_update empty_st a x) (at level 100).
 
-  Fixpoint seval (st : state) (s : statement) {struct s} : state :=
+  Fixpoint seval {n : nat} (st : state n) (s : statement) : state n :=
     match s with
-    | qreg q # n => (q !-> (Vector n) ; st)
+    | qreg q # n => (q !-> init0 n ; st)
+    | creg c # n => (c !-> init0 n ; st) (* incorrect *)
+    | meas q # n, c # m => let st' := print_matrix (st q) in st
+    | X q # n => (q !-> (st q) ; st)
+    | H q # n => (q !-> (st q) ; st)
+    | CX q1 # n, q2 # m => st (* TODO *)
+    | s_newgate _ => st
+    | s_opaque _ _ _ => st
+    | s_if _ _ _ => st
+    | s_barrier _ => st
+    | s_seq s1 s2 => let st' := seval st s1 in seval st' s2
+    | _ => st
     end.
 
   (* Properties worth verifying
