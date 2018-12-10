@@ -191,31 +191,40 @@ Print phil1.
 Import Matrix.
 Import Maps.
 
-(* We define state as a total map from id to density matrices *)
-Definition state (n : nat) := total_map (Square n).
+(* We define state as a total map from id to state vectors *)
+Definition state (n : nat) := total_map (Vector n).
 
 Import Complex.
 
 (* QASM declarations start with |0> *)
-Definition init0 (n : nat) : Square n :=
+Definition init0 (n : nat) : Vector n :=
   fun x y =>
     match (x, y) with
     | (0, 0) => 1%R
     | _ => C0
     end.
 
-Definition zero (n : nat) : Square n :=
+Definition zero (n : nat) : Vector n :=
   fun x y => C0.
 
-Definition empty_st (n : nat) := (_ !-> zero n).
+(*Arguments zero [n] _.*)
+
+(* choosing to use fixed dimension of 2 as I haven't found a way to deal with
+   correct dimensions of matrices yet when it comes to proofs *)
+Definition empty_st := (_ !-> zero 2).
+
+Check empty_st.
+
+Example empty_state_zero_on_any : (empty_st c) = (zero _).
+Proof. reflexivity. Qed.
 
 Notation "a '!->' x"  := (t_update empty_st a x) (at level 100).
 
-Fixpoint seval {n : nat} (st : state n) (s : statement) : state n :=
+Fixpoint seval (ns : nat) (st : state ns) (s : statement) : state ns :=
   match s with
   | qreg q # n => (q !-> init0 n ; st)
-  | creg c # n => (c !-> init0 n ; st) (* incorrect *)
-  | meas q # n, c # m => let st' := print_matrix (st q) in st
+  | creg c # n => (c !-> zero n ; st)
+  | meas q # n, c # m => st (* TODO: need to find a way to output the measurement *)
   | X q # n => (q !-> (st q) ; st) (* TODO *)
   | H q # n => (q !-> (st q) ; st) (* TODO required for phil1 *)
   | CX q1 # n, q2 # m => st (* TODO *)
@@ -223,21 +232,23 @@ Fixpoint seval {n : nat} (st : state n) (s : statement) : state n :=
   | s_opaque _ _ _ => st
   | s_if _ _ _ => st
   | s_barrier _ => st
-  | s_seq s1 s2 => let st' := seval st s1 in seval st' s2
+  | s_seq s1 s2 => let st' := seval ns st s1 in seval ns st' s2
   | _ => st
   end.
 
-Check seval (empty_st 2) phil1.
+Check seval 2 empty_st phil1.
+Check seval 2 empty_st deutsch.
 
-Example empty_state_zero_on_any : (empty_st 2) c
-= zero 2.
-Proof.
-  simpl. reflexivity. Qed.
+(* An issue here is that the init0 state could be of any dimension but
+   this proof still succeeds. Seems because of the way matrices are defined to
+   be functions. *)
+Example decl_adds_to_state : (seval 2 empty_st (qreg q#2%nat)) q
+= (init0 _).
+Proof. simpl. reflexivity. Qed.
 
-Example decl_adds_to_state : (seval (empty_st 2) (qreg q#2%nat)) q
-= (init0 2).
-Proof.
-  simpl. reflexivity. Qed.
+Example decl_meas : (seval 2 empty_st (qreg q#2%nat ;; meas q#1%nat, c#1%nat)) q
+= (init0 _).
+Proof. simpl. reflexivity. Qed.
 
 (* Properties worth verifying
      - Whether U_f is unitary (QCX above)
