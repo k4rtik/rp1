@@ -232,6 +232,8 @@ Definition hadamard2 : Matrix 2 2 :=
 Definition h2_zero : Square 2 :=
   (fun x y => match x, y with
           | 0, 0 => (1 / 2)
+          | 0, 1 => (1 / 2)
+          | 1, 0 => (1 / 2)
           | 1, 1 => (1 / 2)
           | _, _ => C0
           end).
