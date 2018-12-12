@@ -113,10 +113,9 @@ Definition program := list statement.
      measure q[0] -> c[0];
      ```
  *)
+
 Definition q : string := "q".
 Definition c : string := "c".
-(*  Definition X : string := "X".
-  Definition H : string := "H". *)
 
 (* Introduce some notation *)
 Bind Scope statement_scope with statement.
@@ -191,16 +190,15 @@ Print phil1.
 
 Import Matrix.
 Import Maps.
-
-(* We define state as a total map from id to density matrices *)
-Definition state (n : nat) := total_map (Square n).
-
+Import Quantum.
 Import Complex.
 Open Scope C_scope.
 
-Import Quantum.
 
-Definition zero (n : nat) : Square n :=
+(* We define state as a total map from id to density matrices *)
+Definition state (n : nat) := total_map (Density n).
+
+Definition zero (n : nat) : Density n :=
   fun x y => C0.
 
 (* choosing to use fixed dimension of 2 as I haven't found a way to deal with
@@ -214,7 +212,7 @@ Proof. reflexivity. Qed.
 
 Notation "a '!->' x"  := (t_update empty_st a x) (at level 100).
 
-Definition h2_zero : Square 2 :=
+Definition h2_zero : Density 2 :=
   (fun x y => match x, y with
           | 0, 0 => (1 / 2)
           | 0, 1 => (1 / 2)
@@ -229,8 +227,7 @@ Fixpoint seval (ns : nat) (st : state ns) (s : statement) : state ns :=
   | creg c # n => (c !-> zero n ; st)
   | meas q # n, c # m => st (* TODO: need to find a way to output the measurement *)
   | X q # n => (q !-> (st q) ; st) (* TODO *)
-  | H q # n => (q !-> (Mmult (Mmult hadamard (st q))
-                     hadamard) ; st)
+  | H q # n => (q !-> (super hadamard (st q)) ; st)
   | CX q1 # n, q2 # m => st (* TODO *)
   | s_newgate _ => st
   | s_opaque _ _ _ => st
@@ -260,6 +257,7 @@ Example phil1_zero : (seval 2 empty_st phil1) q
 Proof.
   simpl.
   rewrite t_update_eq.
+  unfold super.
   solve_matrix.
 Qed.
 
