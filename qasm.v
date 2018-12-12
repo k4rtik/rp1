@@ -217,7 +217,7 @@ Fixpoint seval (ns : nat) (st : state ns) (s : statement) : state ns :=
   | qreg q # n => (q !-> ∣0⟩ ; st)
   | creg c # n => (c !-> zero 2 ; st)
   | meas q # n, c # m => (c !-> meas_op (st q) ; st)
-  | X q # n => (q !-> (st q) ; st) (* TODO *)
+  | X q # n => (q !-> (super σx (st q)) ; st)
   | H q # n => (q !-> (super hadamard (st q)) ; st)
   | CX q1 # n, q2 # m => st (* TODO *)
   | s_newgate _ => st
@@ -275,6 +275,17 @@ Proof.
   solve_matrix.
   apply eqb_string_false_iff; reflexivity.
   apply eqb_string_false_iff; reflexivity.
+Qed.
+
+Example X_works : (seval 2 empty_st (qreg q#2%nat;; X q#0%nat)) q
+                  = ∣1⟩⟨1∣.
+Proof.
+  simpl.
+  rewrite t_update_eq.
+  rewrite t_update_eq.
+  unfold super.
+  Msimpl.
+  solve_matrix.
 Qed.
 
 (* Properties worth verifying
