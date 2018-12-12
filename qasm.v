@@ -215,7 +215,7 @@ Notation "a '!->' x"  := (t_update empty_st a x) (at level 100).
 Fixpoint seval (ns : nat) (st : state ns) (s : statement) : state ns :=
   match s with
   | qreg q # n => (q !-> ∣0⟩ ; st)
-  | creg c # n => (c !-> zero n ; st)
+  | creg c # n => (c !-> zero 2 ; st)
   | meas q # n, c # m => (c !-> meas_op (st q) ; st)
   | X q # n => (q !-> (st q) ; st) (* TODO *)
   | H q # n => (q !-> (super hadamard (st q)) ; st)
@@ -238,12 +238,21 @@ Example decl_adds_to_state : (seval 2 empty_st (qreg q#2%nat)) q
                              = ∣0⟩.
 Proof. simpl. reflexivity. Qed.
 
-(* meas is not really doing anything yet *)
-Example decl_meas : (seval 2 empty_st (qreg q#2%nat ;; meas q#1%nat, c#1%nat)) q
-                    = ∣0⟩.
-Proof. simpl. reflexivity. Qed.
+Example decl_meas : (seval 2 empty_st (qreg q#2%nat ;; meas q#0%nat, c#0%nat)) c
+                    = ∣0⟩⟨0∣.
+Proof.
+  simpl.
+  rewrite t_update_eq.
+  rewrite t_update_eq.
+  unfold meas_op.
+  unfold Splus.
+  unfold super.
+  Msimpl.
+  solve_matrix.
+Qed.
 
-Definition h2_zero : Density 2 :=
+(* final output of running phil1 with fixed input ∣0⟩ *)
+Definition phil1_zero : Density 2 :=
   (fun x y => match x, y with
           | 0, 0 => (1 / 2)
           | 1, 1 => (1 / 2)
@@ -251,8 +260,8 @@ Definition h2_zero : Density 2 :=
           end).
 
 
-Example phil1_zero : (seval 2 empty_st phil1) c
-                     = h2_zero.
+Example phil1_works : (seval 2 empty_st phil1) c
+                     = phil1_zero.
 Proof.
   simpl.
   rewrite t_update_eq.
