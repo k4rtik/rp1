@@ -219,7 +219,7 @@ Fixpoint seval (ns : nat) (st : state ns) (s : statement) : state ns :=
   | meas q # n, c # m => (c !-> meas_op (st q) ; st)
   | X q # n => (q !-> (super σx (st q)) ; st)
   | H q # n => (q !-> (super hadamard (st q)) ; st)
-  | CX q1 # n, q2 # m => st (* TODO *)
+  | CX q1 # n, q2 # m => (q !-> (super cnot (kron (st q1) (st q2))) ; st)
   | s_newgate _ => st
   | s_opaque _ _ _ => st
   | s_if _ _ _ => st
@@ -288,8 +288,71 @@ Proof.
   solve_matrix.
 Qed.
 
-(* Properties worth verifying
-     - Whether U_f is unitary (QCX above)
-     - output for constant is just zero
-     - output for balanced in just one
-*)
+Definition q1 : string := "q1".
+Definition q2 : string := "q2".
+
+Definition CX_10 : Density 2 :=
+  (fun x y => match x, y with
+          | 3, 3 => C1
+          | _, _ => C0
+          end).
+
+Example CX_works : (seval 2 empty_st (qreg q1#1%nat;;
+                                      qreg q2#1%nat;;
+                                      X q1#0%nat;;
+                                      CX q1#0%nat, q2#0%nat))
+                     q = CX_10.
+Proof.
+  simpl.
+  rewrite t_update_eq.
+  rewrite t_update_eq.
+  rewrite t_update_permute.
+  rewrite t_update_eq.
+  rewrite t_update_neq.
+  rewrite t_update_neq.
+  rewrite t_update_eq.
+  unfold super.
+  Msimpl.
+  solve_matrix.
+  apply eqb_string_false_iff; reflexivity.
+  apply eqb_string_false_iff; reflexivity.
+  apply eqb_string_false_iff; reflexivity.
+Qed.
+
+(* Phil2 or bell pair generation *)
+Definition bell_pair : statement :=
+  qreg q1#1%nat;;
+  qreg q2#1%nat;;
+
+  H q1#0%nat;;
+  CX q1#0%nat, q2#0%nat.
+
+Print bell_pair.
+
+
+Definition bp_00 : Density 4 :=
+  (fun x y => match x, y with
+          | 0, 0 => 1/2
+          | 0, 3 => 1/2
+          | 3, 0 => 1/2
+          | 3, 3 => 1/2
+          | _, _ => C0
+          end).
+
+Example bp_works : (seval 2 empty_st bell_pair) q = bp_00.
+Proof.
+  simpl.
+  rewrite t_update_eq.
+  rewrite t_update_eq.
+  rewrite t_update_permute.
+  rewrite t_update_eq.
+  rewrite t_update_neq.
+  rewrite t_update_neq.
+  rewrite t_update_eq.
+  unfold super.
+  Msimpl.
+  solve_matrix.
+  apply eqb_string_false_iff; reflexivity.
+  apply eqb_string_false_iff; reflexivity.
+  apply eqb_string_false_iff; reflexivity.
+Qed.
