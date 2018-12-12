@@ -188,13 +188,13 @@ Print phil1.
      and H as uop's which is what I chose to do, but I need a way to represent
      complex numbers, vectors and matrices first. *)
 
-Import Matrix.
-Import Maps.
-Import Quantum.
 Import Complex.
+Import Matrix.
+Import Quantum.
 Open Scope C_scope.
 
 
+Import Maps.
 (* We define state as a total map from id to density matrices *)
 Definition state (n : nat) := total_map (Density n).
 
@@ -212,20 +212,11 @@ Proof. reflexivity. Qed.
 
 Notation "a '!->' x"  := (t_update empty_st a x) (at level 100).
 
-Definition h2_zero : Density 2 :=
-  (fun x y => match x, y with
-          | 0, 0 => (1 / 2)
-          | 0, 1 => (1 / 2)
-          | 1, 0 => (1 / 2)
-          | 1, 1 => (1 / 2)
-          | _, _ => C0
-          end).
-
 Fixpoint seval (ns : nat) (st : state ns) (s : statement) : state ns :=
   match s with
   | qreg q # n => (q !-> ∣0⟩ ; st)
   | creg c # n => (c !-> zero n ; st)
-  | meas q # n, c # m => st (* TODO: need to find a way to output the measurement *)
+  | meas q # n, c # m => (c !-> meas_op (st q) ; st)
   | X q # n => (q !-> (st q) ; st) (* TODO *)
   | H q # n => (q !-> (super hadamard (st q)) ; st)
   | CX q1 # n, q2 # m => st (* TODO *)
@@ -252,13 +243,29 @@ Example decl_meas : (seval 2 empty_st (qreg q#2%nat ;; meas q#1%nat, c#1%nat)) q
                     = ∣0⟩.
 Proof. simpl. reflexivity. Qed.
 
-Example phil1_zero : (seval 2 empty_st phil1) q
+Definition h2_zero : Density 2 :=
+  (fun x y => match x, y with
+          | 0, 0 => (1 / 2)
+          | 1, 1 => (1 / 2)
+          | _, _ => C0
+          end).
+
+
+Example phil1_zero : (seval 2 empty_st phil1) c
                      = h2_zero.
 Proof.
   simpl.
   rewrite t_update_eq.
+  rewrite t_update_permute.
+  rewrite t_update_permute.
+  rewrite t_update_eq.
+  unfold meas_op.
+  unfold Splus.
   unfold super.
+  Msimpl.
   solve_matrix.
+  apply eqb_string_false_iff; reflexivity.
+  apply eqb_string_false_iff; reflexivity.
 Qed.
 
 (* Properties worth verifying
