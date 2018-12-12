@@ -3,6 +3,7 @@ Require Import Prelim.
 Require Matrix.
 Require Maps.
 Require Complex.
+Require Quantum.
 
 
 (* First we define Open QASM Grammar:
@@ -195,19 +196,12 @@ Import Maps.
 Definition state (n : nat) := total_map (Square n).
 
 Import Complex.
+Open Scope C_scope.
 
-(* QASM declarations start with |0> *)
-Definition init0 (n : nat) : Square n :=
-  fun x y =>
-    match (x, y) with
-    | (0, 0) => C1
-    | _ => C0
-    end.
+Import Quantum.
 
 Definition zero (n : nat) : Square n :=
   fun x y => C0.
-
-(*Arguments zero [n] _.*)
 
 (* choosing to use fixed dimension of 2 as I haven't found a way to deal with
    correct dimensions of matrices yet when it comes to proofs *)
@@ -220,15 +214,6 @@ Proof. reflexivity. Qed.
 
 Notation "a '!->' x"  := (t_update empty_st a x) (at level 100).
 
-Definition hadamard2 : Matrix 2 2 :=
-  (fun x y => match x, y with
-          | 0, 0 => (1 / √2)
-          | 0, 1 => (1 / √2)
-          | 1, 0 => (1 / √2)
-          | 1, 1 => -(1 / √2)
-          | _, _ => C0
-          end).
-
 Definition h2_zero : Square 2 :=
   (fun x y => match x, y with
           | 0, 0 => (1 / 2)
@@ -240,12 +225,12 @@ Definition h2_zero : Square 2 :=
 
 Fixpoint seval (ns : nat) (st : state ns) (s : statement) : state ns :=
   match s with
-  | qreg q # n => (q !-> init0 (2^n) ; st)
+  | qreg q # n => (q !-> ∣0⟩ ; st)
   | creg c # n => (c !-> zero n ; st)
   | meas q # n, c # m => st (* TODO: need to find a way to output the measurement *)
   | X q # n => (q !-> (st q) ; st) (* TODO *)
-  | H q # n => (q !-> (@Mmult 2 2 2 (@Mmult 2 2 2 hadamard2 (st q))
-                     hadamard2) ; st)
+  | H q # n => (q !-> (Mmult (Mmult hadamard (st q))
+                     hadamard) ; st)
   | CX q1 # n, q2 # m => st (* TODO *)
   | s_newgate _ => st
   | s_opaque _ _ _ => st
@@ -262,29 +247,21 @@ Check seval 2 empty_st deutsch.
    this proof still succeeds. Seems because of the way matrices are defined to
    be functions. *)
 Example decl_adds_to_state : (seval 2 empty_st (qreg q#2%nat)) q
-= init0 _.
+                             = ∣0⟩.
 Proof. simpl. reflexivity. Qed.
 
 (* meas is not really doing anything yet *)
 Example decl_meas : (seval 2 empty_st (qreg q#2%nat ;; meas q#1%nat, c#1%nat)) q
-= init0 _.
+                    = ∣0⟩.
 Proof. simpl. reflexivity. Qed.
 
 Example phil1_zero : (seval 2 empty_st phil1) q
-= h2_zero.
+                     = h2_zero.
 Proof.
   simpl.
   rewrite t_update_eq.
-  (* rewrite t_update_permute.
-  rewrite t_update_eq.
-  unfold Mmult, hadamard2, init0. *)
-  unfold Mmult.
-  prep_matrix_equality.
-  destruct x; destruct y; simpl; autorewrite with C_db. try destruct x; try destruct y.
-  (*
-  symmetry.
-  rewrite <- Csqrt_sqrt.*)
-  Admitted.
+  solve_matrix.
+Qed.
 
 (* Properties worth verifying
      - Whether U_f is unitary (QCX above)

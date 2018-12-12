@@ -1025,9 +1025,9 @@ Proof.
   induction H.
   - destruct H as [φ [[WFφ IP1] Eρ]].
     destruct (lt_dec i n). 
-    Focus 2.
+    2: {
       rewrite Eρ. unfold Mmult, adjoint. simpl. rewrite WFφ. simpl. lra.
-      omega.
+      omega. }
     rewrite Eρ.
     unfold Mmult, adjoint in *.
     simpl in *.
