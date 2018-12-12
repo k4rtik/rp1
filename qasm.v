@@ -1,13 +1,16 @@
-Require Import String.
-Require Import Prelim.
+Require Import String. (* Standard library *)
+Require Import Prelim. (* QWire *)
+
+(* To be imported later as necessary *)
 Require Matrix.
-Require Maps.
 Require Complex.
 Require Quantum.
+Require Maps.
 
-
+(******************************************************************************)
 (* First we define Open QASM Grammar:
      https://arxiv.org/pdf/1707.03429.pdf pp. 21-22 *)
+(******************************************************************************)
 
 Definition id := string.
 Definition real := R.
@@ -46,12 +49,12 @@ Inductive argument : Set :=
 | a_ida (name : id) (size : nninteger).
 
 (*
-  Definition mixedlist := list argument. (* probably imprecise *)
-  Definition anylist := list argument. (* probably imprecise *)
+Definition mixedlist := list argument. (* probably imprecise *)
+Definition anylist := list argument. (* probably imprecise *)
  *)
 
-(* To prevent confusion over which of the two lists to use,
-     I am just going to use an arglist *)
+(* To prevent confusion over which of the two above lists to use,
+   I am just going to use an arglist *)
 Definition arglist := list argument.
 
 Inductive uop : Set :=
@@ -96,23 +99,8 @@ Definition program := list statement.
 (* ignoring <mainprogram> as it serves no purpose for our needs *)
 
 
+(******************************************************************************)
 (* Next we need to define some variables and write some programs *)
-(* Here's Deutsch algorithm in QASM that we write below. Src:
-     https://github.com/Qiskit/openqasm/blob/master/examples/ibmqx2/Deutsch_Algorithm.qasm
-
-     ```
-     qreg q[2];
-     creg c[1];
-
-     X q[1];
-     H q[0];
-     H q[1];
-     CX q[0],q[1];
-     H q[0];
-
-     measure q[0] -> c[0];
-     ```
- *)
 
 Definition q : string := "q".
 Definition c : string := "c".
@@ -131,29 +119,29 @@ Notation "'CX' q0 # n , q1 # m" :=
   (s_qop (q_uop (u_CX (a_ida q0 n) (a_ida q1 m)))) (at level 60, right associativity) : statement_scope.
 Notation "'meas' q # n , c # m" :=
   (s_qop (q_meas (a_ida q n) (a_ida c m))) (at level 60, right associativity) : statement_scope.
-(* Perhaps define this to be a cons and remove the s_seq additional statement
-     above, so I can use program as the return type instead of statement *)
+(* Perhaps define this to be a `cons` and remove the `s_seq` additional statement
+     above, so I can use `program` as the return type instead of statement *)
 Notation "s1 ;; s2" :=
   (s_seq s1 s2) (at level 80, right associativity) : statement_scope.
 
 Open Scope statement_scope.
 
-(*
-  (* This is how we can define new gates, currently they can't be used *)
-  Definition X_gate : statement :=
-    (* gate x a { u3(pi,0,pi) a; } *)
-    s_newgate (gate X None [q]
-                    [g_uop
-                       (u_U (e_pi :: e_real R0 :: e_pi :: nil) (a_id q))]).
+(* Here's Deutsch algorithm in QASM that we write below. Src:
+     https://github.com/Qiskit/openqasm/blob/master/examples/ibmqx2/Deutsch_Algorithm.qasm
 
-  Definition H_gate : statement :=
-    (* gate h a { u2(0,pi) a; } *)
-    s_newgate (gate H None [q]
-                    [g_uop
-                       (u_U
-                          ((e_binop e_pi b_div (e_nat 2)) :: e_real R0 :: e_pi :: nil)
-                          (a_id q))]).
- *)
+     ```
+     qreg q[2];
+     creg c[1];
+
+     X q[1];
+     H q[0];
+     H q[1];
+     CX q[0],q[1];
+     H q[0];
+
+     measure q[0] -> c[0];
+     ```
+*)
 
 Definition deutsch : statement :=
   qreg q#2;;
@@ -188,11 +176,15 @@ Print phil1.
      and H as uop's which is what I chose to do, but I need a way to represent
      complex numbers, vectors and matrices first. *)
 
+(* All three of the following modules courtesy of QWire project *)
 Import Complex.
 Import Matrix.
 Import Quantum.
+
 Open Scope C_scope.
 
+(******************************************************************************)
+(* Now we introduce state, the Maps module comes from Software Foundations *)
 
 Import Maps.
 (* We define state as a total map from id to density matrices *)
@@ -207,6 +199,7 @@ Definition empty_st := (_ !-> zero 2).
 
 Check empty_st.
 
+(* Sanity check *)
 Example empty_state_zero_on_any : (empty_st c) = (zero _).
 Proof. reflexivity. Qed.
 
@@ -214,30 +207,29 @@ Notation "a '!->' x"  := (t_update empty_st a x) (at level 100).
 
 Fixpoint seval (ns : nat) (st : state ns) (s : statement) : state ns :=
   match s with
-  | qreg q # n => (q !-> ∣0⟩ ; st)
-  | creg c # n => (c !-> zero 2 ; st)
+  | qreg q # n => (q !-> ∣0⟩ ; st) (* assuming single qubit *)
+  | creg c # n => (c !-> zero 2 ; st) (* ditto *)
   | meas q # n, c # m => (c !-> meas_op (st q) ; st)
   | X q # n => (q !-> (super σx (st q)) ; st)
   | H q # n => (q !-> (super hadamard (st q)) ; st)
-  | CX q1 # n, q2 # m => (q !-> (super cnot (kron (st q1) (st q2))) ; st)
-  | s_newgate _ => st
-  | s_opaque _ _ _ => st
-  | s_if _ _ _ => st
-  | s_barrier _ => st
+  | CX q1 # n, q2 # m => (q !-> (super cnot (kron (st q1) (st q2))) ; st) (* super hacky,
+                                                                          see notes below *)
   | s_seq s1 s2 => let st' := seval ns st s1 in seval ns st' s2
-  | _ => st
+  | _ => st (* leave unused operations undefined for now *)
   end.
 
 Check seval 2 empty_st phil1.
 Check seval 2 empty_st deutsch.
 
-(* An issue here is that the init0 state could be of any dimension but
-   this proof still succeeds. Seems because of the way matrices are defined to
-   be functions. *)
+(* Sanity check *)
 Example decl_adds_to_state : (seval 2 empty_st (qreg q#2%nat)) q
                              = ∣0⟩.
 Proof. simpl. reflexivity. Qed.
 
+(* Because of the way the state is defined, proof steps require finding the
+   correct mapping before applying any matrix related tactics from QWire.
+   In future, I would like to use a better data structure for state or come
+   up with tactic automation to reduce this avoidable proof burden. *)
 Example decl_meas : (seval 2 empty_st (qreg q#2%nat ;; meas q#0%nat, c#0%nat)) c
                     = ∣0⟩⟨0∣.
 Proof.
@@ -251,7 +243,8 @@ Proof.
   solve_matrix.
 Qed.
 
-(* final output of running phil1 with fixed input ∣0⟩ *)
+(* Final output of running phil1 (coin toss) with fixed input ∣0⟩, ie equal
+   probabilities of getting 0 or 1 *)
 Definition phil1_zero : Density 2 :=
   (fun x y => match x, y with
           | 0, 0 => (1 / 2)
@@ -259,8 +252,8 @@ Definition phil1_zero : Density 2 :=
           | _, _ => C0
           end).
 
-
-Example phil1_works : (seval 2 empty_st phil1) c
+(* First proper proof which basically verifies whether we get the right output *)
+Theorem phil1_works : (seval 2 empty_st phil1) c
                      = phil1_zero.
 Proof.
   simpl.
@@ -276,7 +269,11 @@ Proof.
   apply eqb_string_false_iff; reflexivity.
   apply eqb_string_false_iff; reflexivity.
 Qed.
+(* Here we also see the side effect of manually manipulating state map: extra
+   goals are generated to ensure that identifiers are unique. The last two
+   lines above take care of them. *)
 
+(* Verifying working of Pauli X on ∣0⟩ state *)
 Example X_works : (seval 2 empty_st (qreg q#2%nat;; X q#0%nat)) q
                   = ∣1⟩⟨1∣.
 Proof.
@@ -288,9 +285,13 @@ Proof.
   solve_matrix.
 Qed.
 
+(* Unfortunately, I had to come up with a very hacky way to make CNOT (CX)
+   work in the short term. Duely noted that both the representation of state
+   and ability to manipulate individual qubits of a register need a lot more work.*)
 Definition q1 : string := "q1".
 Definition q2 : string := "q2".
 
+(* Output of applying CX to ∣10⟩ *)
 Definition CX_10 : Density 2 :=
   (fun x y => match x, y with
           | 3, 3 => C1
@@ -329,7 +330,7 @@ Definition bell_pair : statement :=
 
 Print bell_pair.
 
-
+(* Bell pair circuit output for ∣00⟩ *)
 Definition bp_00 : Density 4 :=
   (fun x y => match x, y with
           | 0, 0 => 1/2
@@ -356,3 +357,7 @@ Proof.
   apply eqb_string_false_iff; reflexivity.
   apply eqb_string_false_iff; reflexivity.
 Qed.
+
+(* After defining CX in a hacky way above, it is not worth trying to prove
+   correctness of deutsch as it will involve several identifier changes.
+   I hope to fix the fundamental issues with state. *)
